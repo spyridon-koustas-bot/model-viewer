@@ -20,7 +20,7 @@ import {lerp} from 'three/src/math/MathUtils.js';
 
 import {ModelScene} from './ModelScene.js';
 
-export type Side = 'back'|'bottom';
+export type Side = 'back'|'bottom'|'top';
 
 // The softness [0, 1] of the shadow is mapped to a resolution between
 // 2^LOG_MAX_RESOLUTION and 2^LOG_MIN_RESOLUTION.
@@ -157,6 +157,8 @@ export class Shadow extends Object3D {
 
     if (side === 'bottom') {
       position.y = boundingBox.min.y;
+    } else if (side === 'top') {
+      position.y = boundingBox.max.y;
     } else {
       position.z = boundingBox.min.y;
     }

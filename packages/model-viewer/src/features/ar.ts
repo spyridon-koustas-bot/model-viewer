@@ -88,7 +88,7 @@ export const ARMixin = <T extends Constructor<ModelViewerElementBase>>(
     arUsdzMaxTextureSize: string = 'auto';
 
     @property({type: String, attribute: 'ar-placement'})
-    arPlacement: string = 'floor';
+    arPlacement: 'floor'|'wall'|'ceiling' = 'floor';
 
     @property({type: String, attribute: 'ar-modes'})
     arModes: string = DEFAULT_AR_MODES;
@@ -279,7 +279,7 @@ configuration or device capabilities');
         this[$arButtonContainer].removeEventListener(
             'click', this[$onARButtonContainerClick]);
         const {arRenderer} = this[$renderer];
-        arRenderer.placeOnWall = this.arPlacement === 'wall';
+        arRenderer.placementMode = this.arPlacement;
         await arRenderer.present(this[$scene], this.xrEnvironment);
       } catch (error) {
         console.warn('Error while trying to present in AR with WebXR');
@@ -329,7 +329,7 @@ configuration or device capabilities');
       if (this.arScale === 'fixed') {
         params.set('resizable', 'false');
       }
-      if (this.arPlacement === 'wall') {
+      if (this.arPlacement !== 'floor') {
         params.set('enable_vertical_placement', 'true');
       }
       if (params.has('sound')) {
