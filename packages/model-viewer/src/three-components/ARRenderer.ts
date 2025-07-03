@@ -113,7 +113,7 @@ export class ARRenderer extends EventDispatcher<
     {status: {status: ARStatus}, tracking: {status: ARTracking}}> {
   public threeRenderer: WebGLRenderer;
   public currentSession: XRSession|null = null;
-  public placeOnWall = false;
+  public placementMode: 'floor'|'wall'|'ceiling' = 'floor';
 
   private placementBox: PlacementBox|null = null;
   private menuPanel: XRMenuPanel|null = null;
@@ -280,11 +280,15 @@ export class ARRenderer extends EventDispatcher<
     scene.element.addEventListener('load', this.onUpdateScene);
 
     const radians = HIT_ANGLE_DEG * Math.PI / 180;
-    const ray = this.placeOnWall === true ?
+    const ray = this.placementMode === 'wall' ?
         undefined :
         new XRRay(
             new DOMPoint(0, 0, 0),
-            {x: 0, y: -Math.sin(radians), z: -Math.cos(radians)});
+            {
+              x: 0,
+              y: this.placementMode === 'ceiling' ? Math.sin(radians) : -Math.sin(radians),
+              z: -Math.cos(radians)
+            });
     currentSession
         .requestHitTestSource!
         ({space: viewerRefSpace, offsetRay: ray})!.then(hitTestSource => {
@@ -303,7 +307,10 @@ export class ARRenderer extends EventDispatcher<
 
     this.currentSession = currentSession;
     this.placementBox =
-        new PlacementBox(scene, this.placeOnWall ? 'back' : 'bottom');
+        new PlacementBox(
+            scene,
+            this.placementMode === 'wall' ? 'back' :
+                (this.placementMode === 'ceiling' ? 'top' : 'bottom'));
     this.placementComplete = false;
 
     if (this.xrMode !== XRMode.SCREEN_SPACE) {
@@ -499,10 +506,12 @@ export class ARRenderer extends EventDispatcher<
     if (scene != null) {
       const target = scene.getTarget();
       this.oldTarget.copy(target);
-      if (this.placeOnWall) {
+      if (this.placementMode === 'wall') {
         // Move the scene's target to the center of the back of the model's
         // bounding box.
         target.z = scene.boundingBox.min.z;
+      } else if (this.placementMode === 'ceiling') {
+        target.y = scene.boundingBox.max.y;
       } else {
         // Move the scene's target to the model's floor height.
         target.y = scene.boundingBox.min.y;
@@ -515,7 +524,9 @@ export class ARRenderer extends EventDispatcher<
     if (this.placementBox != null && this.isPresenting) {
       this.placementBox!.dispose();
       this.placementBox = new PlacementBox(
-          this.presentedScene!, this.placeOnWall ? 'back' : 'bottom');
+          this.presentedScene!,
+          this.placementMode === 'wall' ? 'back' :
+              (this.placementMode === 'ceiling' ? 'top' : 'bottom'));
     }
     if (this.xrMode !== XRMode.SCREEN_SPACE) {
         if (this.menuPanel) {
@@ -743,15 +754,16 @@ export class ARRenderer extends EventDispatcher<
 
     const hitMatrix = matrix4.fromArray(pose.transform.matrix);
 
-    if (this.placeOnWall === true) {
+    if (this.placementMode === 'wall') {
       // Orient the model to the wall's normal vector.
       this.goalYaw = Math.atan2(hitMatrix.elements[4], hitMatrix.elements[6]);
     }
-    // Check that the y-coordinate of the normal is large enough that the normal
-    // is pointing up for floor placement; opposite for wall placement.
-    return hitMatrix.elements[5] > 0.75 !== this.placeOnWall ?
-        hitPosition.setFromMatrixPosition(hitMatrix) :
-        null;
+    // Check the surface normal orientation based on placement mode.
+    const normalY = hitMatrix.elements[5];
+    const valid = this.placementMode === 'floor' ? normalY > 0.75 :
+        this.placementMode === 'ceiling' ? normalY < -0.75 : Math.abs(normalY) <
+            0.75;
+    return valid ? hitPosition.setFromMatrixPosition(hitMatrix) : null;
   }
 
   public moveToFloor(frame: XRFrame) {
@@ -776,10 +788,10 @@ export class ARRenderer extends EventDispatcher<
     // If the user is translating, let the finger hit-ray take precedence and
     // ignore this hit result.
     if (!this.isTranslating) {
-      if (this.placeOnWall) {
-        this.goalPosition.copy(hitPoint);
-      } else {
+      if (this.placementMode === 'floor') {
         this.goalPosition.y = hitPoint.y;
+      } else {
+        this.goalPosition.copy(hitPoint);
       }
     }
 
@@ -807,7 +819,7 @@ export class ARRenderer extends EventDispatcher<
       if (hitPosition != null) {
         this.isTranslating = true;
         this.lastDragPosition.copy(hitPosition);
-      } else if (this.placeOnWall === false) {
+      } else if (this.placementMode !== 'wall') {
         this.isRotating = true;
         this.lastAngle = axes[0] * ROTATION_RATE;
       }
@@ -928,7 +940,7 @@ export class ARRenderer extends EventDispatcher<
 
         this.goalPosition.sub(this.lastDragPosition);
 
-        if (this.placeOnWall === false) {
+        if (this.placementMode === 'floor') {
           const offset = hit.y - this.lastDragPosition.y;
           // When a lower floor is found, keep the model at the same height, but
           // drop the placement box to the floor. The model falls on select end.
@@ -990,7 +1002,7 @@ export class ARRenderer extends EventDispatcher<
   
       if (this.xrMode === XRMode.SCREEN_SPACE && !this.isTranslating) {
         const offset = goal.y - y;
-        if (this.placementComplete && this.placeOnWall === false) {
+        if (this.placementComplete && this.placementMode === 'floor') {
           box.offsetHeight = offset / scene.pivot.scale.x;
           scene.setShadowOffset(offset);
         } else if (offset === 0) {

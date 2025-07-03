@@ -122,6 +122,11 @@ export class PlacementBox extends Mesh {
         this.shadowHeight = boundingBox.min.y;
         this.position.y = this.shadowHeight;
         break;
+      case 'top':
+        this.rotateX(-Math.PI / 2);
+        this.shadowHeight = boundingBox.max.y;
+        this.position.y = this.shadowHeight;
+        break;
       case 'back':
         this.shadowHeight = boundingBox.min.z;
         this.position.z = this.shadowHeight;
